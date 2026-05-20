@@ -1,0 +1,18 @@
+Query:
+Compare cloudrift ai and deepinfra's costs for deepseek v3
+
+Tool usage:
+- llm_inference.extract_scraped_info called for cloudrift.
+- llm_inference.extract_scraped_info called for deepinfra.
+- sqlite.read_query used to retrieve recently stored DeepSeek V3 pricing plans when available.
+
+Response:
+For DeepSeek V3, Cloudrift AI and DeepInfra both expose usage-based token pricing, but the cheaper provider depends on the exact model variant and whether the query is comparing input or output tokens. Based on the stored MCP pricing rows, DeepInfra is generally more attractive for very high-volume usage when its input-token rate is lower, while Cloudrift can be competitive when its output-token rate or hosted inference features fit the workload better.
+
+Recommendation:
+Use DeepInfra for workloads dominated by large prompt/input volumes. Use Cloudrift AI when response/output volume, deployment simplicity, or provider-specific availability matters more than the lowest input-token rate. Re-check the source pages before production purchasing because provider prices can change frequently.
+
+Sources:
+- https://www.cloudrift.ai/inference
+- https://deepinfra.com/pricing
+

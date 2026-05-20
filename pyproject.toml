@@ -1,0 +1,15 @@
+[project]
+name = "pricescout-agentic-analyst"
+version = "1.0.0"
+description = "Udacity PriceScout MCP agentic analyst project"
+requires-python = ">=3.10"
+dependencies = [
+    "anthropic>=0.40.0",
+    "firecrawl-py>=1.8.0",
+    "mcp>=1.2.0",
+    "python-dotenv>=1.0.1",
+]
+
+[tool.uv]
+dev-dependencies = []
+

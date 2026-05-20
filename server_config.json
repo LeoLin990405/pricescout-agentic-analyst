@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "llm_inference": {
+      "command": "uv",
+      "args": ["run", "starter_server.py"],
+      "env": {}
+    },
+    "sqlite": {
+      "command": "uvx",
+      "args": ["mcp-server-sqlite", "--db-path", "pricescout.db"],
+      "env": {}
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
+      "env": {}
+    }
+  }
+}
+
