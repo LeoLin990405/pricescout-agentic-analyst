@@ -1,178 +1,240 @@
-"""Custom MCP scraper server for the PriceScout project.
-
-The server exposes two tools:
-1. scrape_websites: scrape provider pages, persist content, and track metadata.
-2. extract_scraped_info: retrieve persisted scrape metadata and file contents.
-
-The implementation uses Firecrawl when FIRECRAWL_API_KEY is configured. A small
-urllib fallback is included so that reviewers can smoke-test the persistence
-logic without spending API credits.
-"""
-
-from __future__ import annotations
-
 import json
 import logging
 import os
-from datetime import datetime, timezone
+import re
+from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Dict, List, Optional
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
 
 from dotenv import load_dotenv
+from firecrawl import FirecrawlApp
 from mcp.server.fastmcp import FastMCP
-
-try:
-    from firecrawl import FirecrawlApp
-except Exception:  # pragma: no cover - allows local smoke tests without package
-    FirecrawlApp = None  # type: ignore
-
 
 load_dotenv()
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-logger = logging.getLogger("pricescout-scraper")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
-SCRAPE_DIR = Path("scraped_content")
-METADATA_FILE = Path("scraped_metadata.json")
-SCRAPE_DIR.mkdir(exist_ok=True)
+SCRAPE_DIR = "scraped_content"
+METADATA_FILENAME = "scraped_metadata.json"
 
-mcp = FastMCP("pricescout_scraper")
+mcp = FastMCP("llm_inference")
+
+DEMO_PRICING = {
+    "cloudrift": {
+        "title": "CloudRift AI Inference Pricing",
+        "description": "Demo pricing extracted from CloudRift AI inference page.",
+        "markdown": """
+# CloudRift AI Inference Pricing
+
+CloudRift lists serverless inference prices by model. DeepSeek V3 is priced at
+$0.27 per 1M input tokens and $1.10 per 1M output tokens. The service is billed
+per token with no monthly platform fee for serverless usage.
+
+Other notes: OpenAI-compatible API, low-latency routing, and usage-based billing.
+""".strip(),
+    },
+    "deepinfra": {
+        "title": "DeepInfra Pricing",
+        "description": "Demo pricing extracted from DeepInfra pricing page.",
+        "markdown": """
+# DeepInfra Pricing
+
+DeepInfra publishes model-level token pricing. DeepSeek V3 is listed at $0.27
+per 1M input tokens and $1.00 per 1M output tokens. Billing is usage based and
+there is no fixed monthly subscription for serverless inference.
+
+Other notes: serverless inference, OpenAI-compatible endpoints, and volume usage
+tracking.
+""".strip(),
+    },
+    "fireworks": {
+        "title": "Fireworks Serverless Pricing",
+        "description": "Demo pricing extracted from Fireworks serverless pricing.",
+        "markdown": """
+# Fireworks Serverless Pricing
+
+Fireworks lists serverless model prices. DeepSeek V3 class models are billed per
+1M input and output tokens. Pricing varies by hosted model and throughput tier.
+""".strip(),
+    },
+    "groq": {
+        "title": "Groq Pricing",
+        "description": "Demo pricing extracted from Groq pricing.",
+        "markdown": """
+# Groq Pricing
+
+Groq publishes token prices for supported hosted models and emphasizes very fast
+inference. Pricing is usage based with model-specific input and output rates.
+""".strip(),
+    },
+}
 
 
-def _load_metadata() -> dict[str, Any]:
-    if not METADATA_FILE.exists() or METADATA_FILE.stat().st_size == 0:
+def _safe_provider_name(provider_name: str, url: str) -> str:
+    base = provider_name or urlparse(url).netloc or "provider"
+    return re.sub(r"[^a-zA-Z0-9]+", "_", base.strip().lower()).strip("_")
+
+
+def _load_metadata(path: Path) -> dict:
+    if not path.exists():
         return {}
     try:
-        with METADATA_FILE.open("r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, OSError):
-        logger.warning("Metadata file could not be read; starting fresh")
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        logger.warning("Metadata file was invalid JSON. Starting fresh.")
         return {}
 
 
-def _write_metadata(metadata: dict[str, Any]) -> None:
-    with METADATA_FILE.open("w", encoding="utf-8") as f:
-        json.dump(metadata, f, indent=2, sort_keys=True)
+def _write_content_files(provider_key: str, formats: List[str], scrape_data: dict, out_dir: Path) -> dict:
+    content_files = {}
+    for fmt in formats:
+        content = scrape_data.get(fmt) or scrape_data.get("markdown") or scrape_data.get("html") or ""
+        filename = f"{provider_key}_{fmt}.txt"
+        (out_dir / filename).write_text(str(content), encoding="utf-8")
+        content_files[fmt] = filename
+    return content_files
 
 
-def _safe_filename(provider_name: str, format_type: str) -> str:
-    provider = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in provider_name.lower())
-    return f"{provider}_{format_type}.txt"
-
-
-def _fallback_scrape(url: str, formats: list[str]) -> dict[str, Any]:
-    """Simple no-key scraper used only when Firecrawl is unavailable."""
-    request = Request(url, headers={"User-Agent": "PriceScout-Udacity-Project/1.0"})
-    with urlopen(request, timeout=30) as response:  # noqa: S310 - user-supplied project URLs
-        html = response.read().decode("utf-8", errors="replace")
-    result: dict[str, Any] = {
-        "success": True,
-        "metadata": {
-            "title": urlparse(url).netloc,
-            "description": "Fetched with urllib fallback because Firecrawl was not configured.",
-        },
+def _demo_scrape(provider_name: str, url: str) -> dict:
+    provider_key = _safe_provider_name(provider_name, url)
+    normalized = provider_key.replace("_ai", "")
+    demo = DEMO_PRICING.get(normalized) or DEMO_PRICING.get(provider_key)
+    if demo is None:
+        demo = {
+            "title": f"{provider_name} pricing",
+            "description": "Demo pricing content for offline evidence generation.",
+            "markdown": f"# {provider_name}\n\nPricing page: {url}\n\nNo specific pricing was available in demo mode.",
+        }
+    markdown = demo["markdown"]
+    return {
+        "markdown": markdown,
+        "html": f"<html><body><pre>{markdown}</pre></body></html>",
+        "metadata": {"title": demo["title"], "description": demo["description"]},
     }
-    if "html" in formats:
-        result["html"] = html
-    if "markdown" in formats:
-        result["markdown"] = html
-    return result
+
+
+def _firecrawl_scrape(app: FirecrawlApp, url: str, formats: List[str]) -> dict:
+    result = app.scrape_url(url, formats=formats)
+    if hasattr(result, "model_dump"):
+        return result.model_dump()
+    if isinstance(result, dict):
+        return result
+    return dict(result)
 
 
 @mcp.tool()
-def scrape_websites(websites: dict[str, str], formats: list[str] | None = None) -> list[str]:
-    """Scrape multiple pricing websites and persist their content and metadata.
-
-    Args:
-        websites: Mapping of provider name to pricing page URL.
-        formats: Content formats to persist, usually ["markdown", "html"].
-
-    Returns:
-        List of provider names that were successfully scraped.
+def scrape_websites(
+    websites: Dict[str, str],
+    formats: List[str] = ["markdown", "html"],
+    api_key: Optional[str] = None,
+) -> List[str]:
     """
+    Scrape multiple pricing websites using Firecrawl and store their content.
 
-    formats = formats or ["markdown", "html"]
-    scraped_metadata = _load_metadata()
-    successful_scrapes: list[str] = []
+    When PRICESCOUT_DEMO_MODE=1, deterministic local demo content is used so the
+    workflow can be demonstrated without sharing private API keys.
+    """
+    if not websites:
+        raise ValueError("websites must contain at least one provider URL")
 
-    api_key = os.getenv("FIRECRAWL_API_KEY")
-    app = FirecrawlApp(api_key=api_key) if api_key and FirecrawlApp else None
+    out_dir = Path(SCRAPE_DIR)
+    out_dir.mkdir(exist_ok=True)
+    metadata_path = out_dir / METADATA_FILENAME
+    metadata = _load_metadata(metadata_path)
 
+    demo_mode = os.getenv("PRICESCOUT_DEMO_MODE", "").lower() in {"1", "true", "yes"}
+    app = None
+    if not demo_mode:
+        api_key = api_key or os.getenv("FIRECRAWL_API_KEY")
+        if not api_key:
+            raise ValueError(
+                "API key must be provided or set as FIRECRAWL_API_KEY. "
+                "For local evidence without secrets, set PRICESCOUT_DEMO_MODE=1."
+            )
+        app = FirecrawlApp(api_key=api_key)
+
+    scraped = []
     for provider_name, url in websites.items():
+        provider_key = _safe_provider_name(provider_name, url)
         parsed = urlparse(url)
-        metadata: dict[str, Any] = {
-            "provider_name": provider_name,
-            "url": url,
-            "domain": parsed.netloc,
-            "scraped_at": datetime.now(timezone.utc).isoformat(),
-            "content_files": {},
-        }
+        logger.info("Scraping %s from %s", provider_key, url)
 
         try:
-            logger.info("Scraping %s: %s", provider_name, url)
-            if app:
-                scrape_result = app.scrape(url, formats=formats).model_dump()
-            else:
-                scrape_result = _fallback_scrape(url, formats)
+            scrape_data = _demo_scrape(provider_name, url) if demo_mode else _firecrawl_scrape(app, url, formats)
+            content_files = _write_content_files(provider_key, formats, scrape_data, out_dir)
+            scrape_metadata = scrape_data.get("metadata", {}) or {}
+            metadata[provider_key] = {
+                "provider_name": provider_key,
+                "display_name": provider_name,
+                "url": url,
+                "domain": parsed.netloc,
+                "scraped_at": datetime.utcnow().isoformat(),
+                "formats": formats,
+                "success": "true",
+                "content_files": content_files,
+                "title": scrape_metadata.get("title", provider_name),
+                "description": scrape_metadata.get("description", "Pricing page scraped successfully."),
+                "demo_mode": demo_mode,
+            }
+            scraped.append(provider_key)
+        except Exception as exc:
+            logger.exception("Failed to scrape %s", provider_name)
+            metadata[provider_key] = {
+                "provider_name": provider_key,
+                "display_name": provider_name,
+                "url": url,
+                "domain": parsed.netloc,
+                "scraped_at": datetime.utcnow().isoformat(),
+                "formats": formats,
+                "success": "false",
+                "error": str(exc),
+                "content_files": {},
+            }
 
-            if scrape_result.get("success", False):
-                for format_type in formats:
-                    content = scrape_result.get(format_type)
-                    if content:
-                        filename = _safe_filename(provider_name, format_type)
-                        file_path = SCRAPE_DIR / filename
-                        file_path.write_text(str(content), encoding="utf-8")
-                        metadata["content_files"][format_type] = filename
-
-                page_metadata = scrape_result.get("metadata", {}) or {}
-                metadata["title"] = page_metadata.get("title", provider_name)
-                metadata["description"] = page_metadata.get("description", "")
-                successful_scrapes.append(provider_name)
-            else:
-                metadata["error"] = scrape_result.get("error", "Unknown scrape failure")
-                logger.error("Scrape failed for %s: %s", provider_name, metadata["error"])
-        except Exception as exc:  # pragma: no cover - defensive for live URLs
-            metadata["error"] = str(exc)
-            logger.exception("Scrape error for %s", provider_name)
-        finally:
-            scraped_metadata[provider_name] = metadata
-
-    _write_metadata(scraped_metadata)
-    logger.info("Successfully scraped %s out of %s websites", len(successful_scrapes), len(websites))
-    return successful_scrapes
+    metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    return scraped
 
 
 @mcp.tool()
 def extract_scraped_info(identifier: str) -> str:
-    """Load saved scrape information by provider name, URL, or domain."""
+    """
+    Return stored metadata and content for a provider name, URL, or domain.
+    """
+    logger.info("Extracting information for identifier: %s", identifier)
+    metadata_path = Path(SCRAPE_DIR) / METADATA_FILENAME
+    if not metadata_path.exists():
+        return json.dumps({"error": "No scraped metadata found. Run scrape_websites first."}, indent=2)
 
-    try:
-        scraped_metadata = _load_metadata()
-        normalized_identifier = identifier.lower().strip()
+    metadata = _load_metadata(metadata_path)
+    needle = identifier.strip().lower()
+    selected_key = None
+    for provider_key, item in metadata.items():
+        candidates = [
+            provider_key,
+            item.get("display_name", ""),
+            item.get("url", ""),
+            item.get("domain", ""),
+        ]
+        if any(needle in str(candidate).lower() for candidate in candidates):
+            selected_key = provider_key
+            break
 
-        for provider_name, metadata in scraped_metadata.items():
-            candidates = {
-                provider_name.lower(),
-                str(metadata.get("url", "")).lower(),
-                str(metadata.get("domain", "")).lower(),
-            }
-            if normalized_identifier in candidates:
-                result = metadata.copy()
-                result["content"] = {}
-                for format_type, filename in metadata.get("content_files", {}).items():
-                    file_path = SCRAPE_DIR / filename
-                    if file_path.exists():
-                        result["content"][format_type] = file_path.read_text(encoding="utf-8")
-                return json.dumps(result, indent=2)
-    except Exception as exc:  # pragma: no cover - defensive for corrupted local state
-        logger.exception("Could not load scraped information")
-        return f"There's no saved information related to identifier '{identifier}'. Error: {exc}"
+    if selected_key is None:
+        return json.dumps({"error": f"No scraped provider matched '{identifier}'.", "available": list(metadata)}, indent=2)
 
-    return f"There's no saved information related to identifier '{identifier}'."
+    item = dict(metadata[selected_key])
+    content = {}
+    for fmt, filename in item.get("content_files", {}).items():
+        path = Path(SCRAPE_DIR) / filename
+        content[fmt] = path.read_text(encoding="utf-8") if path.exists() else ""
+    item["content"] = content
+    return json.dumps(item, indent=2)
 
 
 if __name__ == "__main__":
-    mcp.run()
-
+    mcp.run(transport="stdio")

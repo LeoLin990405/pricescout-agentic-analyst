@@ -2,8 +2,8 @@
 .venv/
 __pycache__/
 *.pyc
+.DS_Store
+test.db
 scraped_content/
 scraped_metadata.json
-pricescout.db
-.DS_Store
 

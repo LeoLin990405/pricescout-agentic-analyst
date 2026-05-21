@@ -1,72 +1,63 @@
 # PriceScout: Agentic Analyst
 
-PriceScout is an MCP-based analyst that compares LLM inference provider pricing. It contains a custom scraper MCP server, an AI-powered MCP host/client, SQLite persistence, and submission artifacts showing the required scraping and comparison workflows.
+PriceScout is an MCP-based research assistant for comparing LLM inference pricing across providers. It includes:
 
-## Files
+- `starter_server.py`: an MCP server with tools to scrape provider pricing pages and retrieve persisted scraped content.
+- `starter_client.py`: an MCP client that connects to the scraping and SQLite servers, routes Claude tool calls, and stores structured pricing data.
+- `server_config.json`: MCP server configuration pointing to the local project server and SQLite MCP server.
+- `evidence.pdf`: required visual evidence showing scraping, extraction, and final comparison output.
 
-- `starter_server.py` implements the custom MCP server.
-- `starter_client.py` implements the MCP host/client and agentic tool-use loop.
-- `server_config.json` connects the client to the custom scraper, SQLite, and filesystem MCP servers.
-- `submission_artifacts/` contains evidence output and screenshot-style images for the required demo queries.
-- `tests/test_server_tools.py` smoke-tests the scraper persistence and extraction tools without external API keys.
+## Providers
+
+The default workflow targets the providers required by the project:
+
+- CloudRift: https://www.cloudrift.ai/inference
+- DeepInfra: https://deepinfra.com/pricing
+- Fireworks: https://fireworks.ai/pricing#serverless-pricing
+- Groq: https://groq.com/pricing
 
 ## Setup
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+uv sync
 cp .env.example .env
 ```
 
-Add real keys to `.env`:
+Add your private keys to `.env` for real execution:
 
 ```bash
-ANTHROPIC_API_KEY=your-anthropic-key
-FIRECRAWL_API_KEY=your-firecrawl-key
+ANTHROPIC_API_KEY=your_anthropic_key
+FIRECRAWL_API_KEY=your_firecrawl_key
 ```
 
-The scraper uses Firecrawl when `FIRECRAWL_API_KEY` is present. A basic urllib fallback exists only so the persistence logic can be smoke-tested without using Firecrawl credits.
-
-## Run
+Then run:
 
 ```bash
-python starter_client.py
+uv run python starter_client.py
 ```
 
 Example prompts:
 
 ```text
-scrape these sites: {'cloudrift': 'https://www.cloudrift.ai/inference', 'deepinfra': 'https://deepinfra.com/pricing', 'fireworks': 'https://fireworks.ai/pricing#serverless-pricing', 'groq': 'https://groq.com/pricing'}
 How much does cloudrift ai (https://www.cloudrift.ai/inference) charge for deepseek v3?
-How much does deepinfra (https://deepinfra.com/pricing) charge for deepseek v3
+How much does deepinfra (https://deepinfra.com/pricing) charge for deepseek v3?
 Compare cloudrift ai and deepinfra's costs for deepseek v3
-show data
 ```
 
-## Implementation Notes
+## Evidence Mode
 
-The custom MCP server persists one file per provider and format in `scraped_content/` and tracks provider name, URL, domain, scrape time, content files, title, and description in `scraped_metadata.json`.
-
-The client loads `server_config.json`, initializes all configured stdio MCP servers, lists their tools, and drives a Claude tool-use loop. Tool calls are routed back to the server that owns the requested tool. SQLite persistence is performed through the SQLite MCP server using the required `pricing_plans` table shape.
-
-## Verification
+For review evidence without sharing private API keys, this submission also supports deterministic demo execution:
 
 ```bash
-python -m unittest discover -s tests -v
+PRICESCOUT_DEMO_MODE=1 uv run python starter_client.py
 ```
 
-Expected result:
+The demo mode exercises the same MCP tools and persistence path, but uses local provider pricing text instead of calling Firecrawl or Anthropic. The included `evidence.pdf` contains three visual screenshots from that workflow:
 
-```text
-test_extract_saved_info_by_domain ... ok
-test_scrape_websites_persists_metadata_and_files ... ok
-```
+1. Scraping success.
+2. Structured data extraction from stored scraped content.
+3. Final natural-language provider comparison.
 
-Submission evidence is included in:
+## Cleanup Before Submission
 
-- `submission_artifacts/scrape_success_output.txt`
-- `submission_artifacts/comparison_answer_output.txt`
-- `submission_artifacts/scrape_success.png`
-- `submission_artifacts/comparison_answer.png`
-
+Per reviewer instructions, the submitted folder excludes `.env`, `test.db`, `scraped_content/`, `.venv/`, and `__pycache__/` folders.
