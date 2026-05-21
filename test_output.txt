@@ -1,0 +1,16 @@
+/Users/leo/Documents/Udacity-Submissions/PriceScout-Agentic-Analyst/.venv/lib/python3.13/site-packages/firecrawl/v2/types.py:964: UserWarning: Field name "json" in "MonitorPageDiff" shadows an attribute in parent "BaseModel"
+  class MonitorPageDiff(BaseModel):
+/Users/leo/Documents/Udacity-Submissions/PriceScout-Agentic-Analyst/.venv/lib/python3.13/site-packages/firecrawl/v2/types.py:979: UserWarning: Field name "json" in "MonitorPageSnapshot" shadows an attribute in parent "BaseModel"
+  class MonitorPageSnapshot(BaseModel):
+test_demo_scrape_websites_persists_metadata_and_files (test_server_tools.PriceScoutServerToolTests.test_demo_scrape_websites_persists_metadata_and_files) ... 2026-05-21 15:34:19,153 - starter_server - INFO - Scraping cloudrift from https://www.cloudrift.ai/inference
+/Users/leo/Documents/Udacity-Submissions/PriceScout-Agentic-Analyst/starter_server.py:176: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  "scraped_at": datetime.utcnow().isoformat(),
+2026-05-21 15:34:19,154 - starter_server - INFO - Scraping completed: 1/1 providers succeeded: ['cloudrift']
+ok
+test_extract_saved_info_by_domain (test_server_tools.PriceScoutServerToolTests.test_extract_saved_info_by_domain) ... 2026-05-21 15:34:19,154 - starter_server - INFO - Extracting information for identifier: deepinfra.com
+ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.002s
+
+OK

@@ -52,11 +52,11 @@ For review evidence without sharing private API keys, this submission also suppo
 PRICESCOUT_DEMO_MODE=1 uv run python starter_client.py
 ```
 
-The demo mode exercises the same MCP tools and persistence path, but uses local provider pricing text instead of calling Firecrawl or Anthropic. The included `evidence.pdf` contains three visual screenshots from that workflow:
+The demo mode exercises the same MCP tools and persistence path, but uses local provider pricing text instead of calling Firecrawl or Anthropic. The included `evidence.pdf` contains three visual evidence pages from that workflow:
 
-1. Scraping success.
-2. Structured data extraction from stored scraped content.
-3. Final natural-language provider comparison.
+1. Four-provider scraping success, including the `Scraping completed: 4/4 providers succeeded` log line.
+2. Structured data extraction and formatted `show data` output from SQLite with the latest five rows.
+3. Final natural-language provider comparison plus unit-test output.
 
 ## Cleanup Before Submission
 

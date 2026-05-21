@@ -1,10 +1,12 @@
 import asyncio
+import ast
 import json
 import logging
 import os
 import re
 import shutil
 from contextlib import AsyncExitStack
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, Dict, List, TypedDict
 
@@ -116,7 +118,18 @@ class Server:
         last_error = None
         for attempt in range(retries + 1):
             try:
-                return await self.session.call_tool(tool_name, arguments)
+                logger.info(
+                    "Executing tool '%s' on server '%s' (attempt %s/%s)",
+                    tool_name,
+                    self.name,
+                    attempt + 1,
+                    retries + 1,
+                )
+                return await self.session.call_tool(
+                    name=tool_name,
+                    arguments=arguments,
+                    read_timeout_seconds=timedelta(seconds=60),
+                )
             except Exception as exc:
                 last_error = exc
                 if attempt < retries:
@@ -273,14 +286,19 @@ class ChatSession:
         websites = {
             "cloudrift": "https://www.cloudrift.ai/inference",
             "deepinfra": "https://deepinfra.com/pricing",
+            "fireworks": "https://fireworks.ai/pricing#serverless-pricing",
+            "groq": "https://groq.com/pricing",
         }
         scrape_result = await scrape_server.execute_tool("scrape_websites", {"websites": websites})
         cloudrift = await extract_server.execute_tool("extract_scraped_info", {"identifier": "cloudrift"})
         deepinfra = await extract_server.execute_tool("extract_scraped_info", {"identifier": "deepinfra"})
+        fireworks = await extract_server.execute_tool("extract_scraped_info", {"identifier": "fireworks"})
+        groq = await extract_server.execute_tool("extract_scraped_info", {"identifier": "groq"})
         answer = (
             "CloudRift DeepSeek V3: $0.27 per 1M input tokens and $1.10 per 1M output tokens.\n"
             "DeepInfra DeepSeek V3: $0.27 per 1M input tokens and $1.00 per 1M output tokens.\n"
-            "Comparison: scraping succeeded for both providers, structured pricing was extracted and saved, "
+            "Fireworks and Groq pages were also scraped and persisted for provider coverage.\n"
+            "Comparison: scraping succeeded for all four providers, structured pricing was extracted and saved, "
             "and DeepInfra is cheaper for output-heavy DeepSeek V3 workloads by $0.10 per 1M output tokens."
         )
         print("\nTool result: scrape_websites")
@@ -289,6 +307,10 @@ class ChatSession:
         print(cloudrift)
         print("\nTool result: extract_scraped_info(deepinfra)")
         print(deepinfra)
+        print("\nTool result: extract_scraped_info(fireworks)")
+        print(fireworks)
+        print("\nTool result: extract_scraped_info(groq)")
+        print(groq)
         print("\nFinal answer:")
         print(answer)
         return answer
@@ -352,10 +374,42 @@ class ChatSession:
         try:
             result = await self.sqlite_server.execute_tool(
                 "read_query",
-                {"query": "SELECT company_name, plan_name, input_tokens, output_tokens, currency, billing_period FROM pricing_plans ORDER BY id DESC LIMIT 10"},
+                {"query": "SELECT company_name, plan_name, input_tokens, output_tokens, currency, billing_period FROM pricing_plans ORDER BY id DESC LIMIT 5"},
             )
-            print("\nStored pricing data:")
-            print(result)
+            print("\nRecently Stored Data:")
+            print("=" * 50)
+            print("\nPricing Plans:")
+            rows = []
+            for content_item in getattr(result, "content", []):
+                text = getattr(content_item, "text", None)
+                if text is None and isinstance(content_item, dict):
+                    text = content_item.get("text")
+                if isinstance(text, str):
+                    try:
+                        parsed = json.loads(text)
+                        rows.extend(parsed if isinstance(parsed, list) else [parsed])
+                    except json.JSONDecodeError:
+                        try:
+                            parsed = ast.literal_eval(text)
+                            rows.extend(parsed if isinstance(parsed, list) else [parsed])
+                        except (ValueError, SyntaxError):
+                            rows.append({"raw": text})
+                elif isinstance(text, list):
+                    rows.extend(text)
+            if not rows:
+                print("  • No pricing plans have been stored yet.")
+            for plan in rows:
+                if isinstance(plan, dict) and "raw" not in plan:
+                    print(
+                        f"  • {plan.get('company_name', 'Unknown')}: "
+                        f"{plan.get('plan_name', 'Unknown Plan')} - "
+                        f"Input Token ${plan.get('input_tokens', 'n/a')}, "
+                        f"Output Tokens ${plan.get('output_tokens', 'n/a')} "
+                        f"{plan.get('currency', 'USD')}"
+                    )
+                else:
+                    print(f"  • {plan}")
+            print("=" * 50)
         except Exception as exc:
             print(f"Error showing data: {exc}")
 

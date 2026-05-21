@@ -197,6 +197,7 @@ def scrape_websites(
             }
 
     metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    logger.info("Scraping completed: %s/%s providers succeeded: %s", len(scraped), len(websites), scraped)
     return scraped
 
 
