@@ -1,36 +1,60 @@
-# PriceScout: Agentic Analyst
+<div align="center">
 
-PriceScout is an MCP-based research assistant for comparing LLM inference pricing across providers. It includes:
+[![English](https://img.shields.io/badge/Language-English-2ea44f?style=for-the-badge)](README.md) &nbsp; [![中文](https://img.shields.io/badge/语言-中文-555555?style=for-the-badge)](README.zh-CN.md)
 
-- `starter_server.py`: an MCP server with tools to scrape provider pricing pages and retrieve persisted scraped content.
-- `starter_client.py`: an MCP client that connects to the scraping and SQLite servers, routes Claude tool calls, and stores structured pricing data.
-- `server_config.json`: MCP server configuration pointing to the local project server and SQLite MCP server.
-- `evidence.pdf`: required visual evidence showing scraping, extraction, and final comparison output.
+# PriceScout · Agentic Analyst
 
-## Providers
+### An MCP research assistant that scrapes and compares LLM inference pricing across providers
 
-The default workflow targets the providers required by the project:
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" />
+  <img src="https://img.shields.io/badge/Protocol-MCP-blueviolet?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/Store-SQLite-blue?style=for-the-badge&logo=sqlite&logoColor=white" />
+  <img src="https://img.shields.io/badge/License-MIT-yellowgreen?style=for-the-badge" />
+</p>
 
-- CloudRift: https://www.cloudrift.ai/inference
-- DeepInfra: https://deepinfra.com/pricing
-- Fireworks: https://fireworks.ai/pricing#serverless-pricing
-- Groq: https://groq.com/pricing
+</div>
 
-## Setup
+> LLM inference pricing is scattered across a dozen provider pages and changes weekly. PriceScout points an agent at those pages, extracts the numbers, persists them, and answers "who's cheaper for model X?".
+
+---
+
+## Overview
+
+PriceScout is an **MCP-based research assistant** for comparing LLM inference pricing across providers.
+
+| Component | Role |
+|---|---|
+| `starter_server.py` | MCP server — tools to scrape provider pricing pages + retrieve persisted content |
+| `starter_client.py` | MCP client — connects to the scraping + SQLite servers, routes Claude tool calls, stores structured pricing data |
+| `server_config.json` | MCP server config (local project server + SQLite MCP server) |
+| `evidence.pdf` | visual evidence: scraping, extraction, final comparison |
+
+---
+
+## 1. Providers
+
+Default workflow targets:
+
+- [CloudRift](https://www.cloudrift.ai/inference) · [DeepInfra](https://deepinfra.com/pricing) · [Fireworks](https://fireworks.ai/pricing#serverless-pricing) · [Groq](https://groq.com/pricing)
+
+---
+
+## 2. Setup
 
 ```bash
 uv sync
 cp .env.example .env
 ```
 
-Add your private keys to `.env` for real execution:
+Add your keys to `.env` for real execution:
 
 ```bash
 ANTHROPIC_API_KEY=your_anthropic_key
 FIRECRAWL_API_KEY=your_firecrawl_key
 ```
 
-Then run:
+Run:
 
 ```bash
 uv run python starter_client.py
@@ -39,25 +63,27 @@ uv run python starter_client.py
 Example prompts:
 
 ```text
-How much does cloudrift ai (https://www.cloudrift.ai/inference) charge for deepseek v3?
-How much does deepinfra (https://deepinfra.com/pricing) charge for deepseek v3?
-Compare cloudrift ai and deepinfra's costs for deepseek v3
+How much does CloudRift charge for deepseek v3?
+How much does DeepInfra charge for deepseek v3?
+Compare CloudRift and DeepInfra costs for deepseek v3
 ```
 
-## Evidence Mode
+---
 
-For review evidence without sharing private API keys, this submission also supports deterministic demo execution:
+## 3. Evidence / Demo Mode
+
+For evidence without sharing private API keys, deterministic demo execution is supported:
 
 ```bash
 PRICESCOUT_DEMO_MODE=1 uv run python starter_client.py
 ```
 
-The demo mode exercises the same MCP tools and persistence path, but uses local provider pricing text instead of calling Firecrawl or Anthropic. The included `evidence.pdf` contains three visual evidence pages from that workflow:
+Demo mode exercises the same MCP tools + persistence path but uses local provider pricing text instead of calling Firecrawl/Anthropic. `evidence.pdf` shows: 4/4 provider scraping success · structured extraction + `show data` from SQLite · final natural-language comparison + unit-test output.
 
-1. Four-provider scraping success, including the `Scraping completed: 4/4 providers succeeded` log line.
-2. Structured data extraction and formatted `show data` output from SQLite with the latest five rows.
-3. Final natural-language provider comparison plus unit-test output.
+The submitted folder excludes `.env`, `test.db`, `scraped_content/`, `.venv/`, `__pycache__/`.
 
-## Cleanup Before Submission
+---
 
-Per reviewer instructions, the submitted folder excludes `.env`, `test.db`, `scraped_content/`, `.venv/`, and `__pycache__/` folders.
+## License
+
+[MIT](LICENSE) © 2026 Leo Lin
